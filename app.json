@@ -18,11 +18,7 @@
       }
     },
     "web": {
-      "favicon": "./assets/favicon.png",
-      "publicPath": "/tacfit/"
-    },
-    "experiments": {
-      "baseUrl": "/tacfit/"
+      "favicon": "./assets/favicon.png"
     }
   }
 }
