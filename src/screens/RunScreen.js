@@ -48,32 +48,62 @@ export default function RunScreen() {
     setPhase(PHASE.ACTIVE);
     Speech.speak('ריצה התחילה. בהצלחה!', { language: 'he-IL', rate: 1.1 });
     timerRef.current = setInterval(() => { elapsedRef.current += 1; setElapsed(elapsedRef.current); }, 1000);
-    locationRef.current = await Location.watchPositionAsync(
-      { accuracy: Location.Accuracy.BestForNavigation, timeInterval: 1000, distanceInterval: 5 },
-      (loc) => {
-        const { latitude, longitude, speed } = loc.coords;
-        if (coordsRef.current.length > 0) {
-          const prev = coordsRef.current[coordsRef.current.length - 1];
-          const delta = calcDistance(prev.latitude, prev.longitude, latitude, longitude);
-          if (delta > 0.003 && delta < 0.5) {
-            distanceRef.current += delta;
-            setDistance(distanceRef.current);
-            setCalories(calcCalories(distanceRef.current));
-            if (speed > 0) { setSpeedKmh(speed * 3.6); setCurrentPace(60 / (speed * 3.6)); }
-            if (elapsedRef.current > 0) setAvgPace(elapsedRef.current / 60 / distanceRef.current);
-            const km = Math.floor(distanceRef.current);
-            if (km > lastKmRef.current) {
-              lastKmRef.current = km;
-              Speech.speak(`ק"מ ${km}. קצב ${formatPace(elapsedRef.current / 60 / distanceRef.current)}.`, { language: 'he-IL', rate: 1.1 });
-              if (Platform.OS !== 'web') Vibration.vibrate([100, 100, 100]);
-            }
-            if ((runType === 'test2k' && distanceRef.current >= 2) ||
-                (runType === 'test3k' && distanceRef.current >= 3)) finishRun();
+    const handleLocation = (loc) => {
+      const { latitude, longitude, speed, accuracy } = loc.coords;
+      // Skip low-accuracy readings (> 30m error)
+      if (accuracy && accuracy > 30) return;
+
+      if (coordsRef.current.length > 0) {
+        const prev = coordsRef.current[coordsRef.current.length - 1];
+        const delta = calcDistance(prev.latitude, prev.longitude, latitude, longitude);
+        // Accept 1m–300m movements per update (filter GPS jumps)
+        if (delta > 0.001 && delta < 0.3) {
+          distanceRef.current += delta;
+          setDistance(distanceRef.current);
+          setCalories(calcCalories(distanceRef.current));
+          // Speed from GPS if available, otherwise calculate from distance/time
+          if (speed != null && speed > 0) {
+            setSpeedKmh(speed * 3.6);
+            setCurrentPace(60 / (speed * 3.6));
+          } else if (elapsedRef.current > 5 && distanceRef.current > 0.01) {
+            const calcSpeed = (distanceRef.current / elapsedRef.current) * 3600;
+            setSpeedKmh(calcSpeed);
+            setCurrentPace(60 / calcSpeed);
           }
+          if (elapsedRef.current > 0 && distanceRef.current > 0)
+            setAvgPace(elapsedRef.current / 60 / distanceRef.current);
+          const km = Math.floor(distanceRef.current);
+          if (km > lastKmRef.current) {
+            lastKmRef.current = km;
+            Speech.speak(`ק"מ ${km}. קצב ${formatPace(elapsedRef.current / 60 / distanceRef.current)}.`, { language: 'he-IL', rate: 1.1 });
+            if (Platform.OS !== 'web') Vibration.vibrate([100, 100, 100]);
+          }
+          if ((runType === 'test2k' && distanceRef.current >= 2) ||
+              (runType === 'test3k' && distanceRef.current >= 3)) finishRun();
         }
-        coordsRef.current = [...coordsRef.current, { latitude, longitude }];
       }
-    );
+      coordsRef.current = [...coordsRef.current, { latitude, longitude }];
+    };
+
+    if (Platform.OS === 'web') {
+      // Browser Geolocation API
+      if (!navigator.geolocation) { Alert.alert('GPS לא זמין בדפדפן זה'); return; }
+      const webWatcher = navigator.geolocation.watchPosition(
+        (pos) => handleLocation({ coords: { latitude: pos.coords.latitude, longitude: pos.coords.longitude, speed: pos.coords.speed, accuracy: pos.coords.accuracy } }),
+        (err) => console.warn('GPS error:', err.message),
+        { enableHighAccuracy: true, maximumAge: 1000, timeout: 5000 }
+      );
+      locationRef.current = { remove: () => navigator.geolocation.clearWatch(webWatcher) };
+    } else {
+      locationRef.current = await Location.watchPositionAsync(
+        {
+          accuracy: Location.Accuracy.BestForNavigation,
+          timeInterval: 1000,
+          distanceInterval: 1,        // update every 1 meter
+        },
+        handleLocation
+      );
+    }
   };
 
   const pauseRun = () => { clearInterval(timerRef.current); locationRef.current?.remove(); setPhase(PHASE.PAUSED); };

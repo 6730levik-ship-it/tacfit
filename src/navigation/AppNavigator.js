@@ -9,6 +9,7 @@ import DashboardScreen from '../screens/DashboardScreen';
 import WorkoutScreen from '../screens/WorkoutScreen';
 import NutritionScreen from '../screens/NutritionScreen';
 import RunScreen from '../screens/RunScreen';
+import ProfileScreen from '../screens/ProfileScreen';
 
 const Tab = createBottomTabNavigator();
 const Stack = createStackNavigator();
@@ -18,6 +19,7 @@ const TAB_ICONS = {
   Workout: '🏋️',
   Run: '🏃',
   Nutrition: '🥗',
+  Profile: '👤',
 };
 
 function MainTabs({ user }) {
@@ -54,6 +56,9 @@ function MainTabs({ user }) {
       </Tab.Screen>
       <Tab.Screen name="Nutrition" options={{ title: 'תזונה' }}>
         {props => <NutritionScreen {...props} user={user} />}
+      </Tab.Screen>
+      <Tab.Screen name="Profile" options={{ title: 'פרופיל' }}>
+        {props => <ProfileScreen {...props} user={user} />}
       </Tab.Screen>
     </Tab.Navigator>
   );
